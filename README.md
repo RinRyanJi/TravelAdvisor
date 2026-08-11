@@ -66,6 +66,26 @@ travel_advisor/
 
 ## 快速開始
 
+### 0. GitHub Codespaces（開啟即用，零設定）
+
+本專案已內建 [Dev Container](.devcontainer/devcontainer.json) 設定，直接在
+GitHub 上點 **Code → Codespaces → Create codespace** 即可：
+
+1. 容器建立時會自動執行 `pip install -e ".[dev]"` 安裝所有相依套件。
+2. 附加（attach）後會自動在背景啟動 `uvicorn`（`0.0.0.0:8000`）。
+3. 連接埠 8000 會自動轉發並開啟預覽視窗——**開啟 Codespace 就能直接看到網頁介面。**
+
+啟動記錄可用 `cat /tmp/uvicorn.log` 查看；若要手動重跑：
+
+```bash
+uvicorn travel_advisor.api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+> 網頁預設走「離線示範模式」（內建京都資料），因此就算 Codespace 的出站網路政策
+> 擋掉開放資料主機也能完整體驗；取消勾選離線模式才會連外。
+
+### 本機安裝
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

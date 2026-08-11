@@ -1,0 +1,38 @@
+{
+  "name": "TravelAdvisor",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  // Install the package (with dev extras) once, right after the container is built.
+  "postCreateCommand": "python -m pip install --upgrade pip && pip install -e \".[dev]\"",
+
+  // On every attach, start the web server in the background if it isn't already
+  // running. Opening the Codespace is enough to get a live, forwarded service.
+  "postAttachCommand": "pgrep -f 'uvicorn travel_advisor' >/dev/null || nohup uvicorn travel_advisor.api:app --host 0.0.0.0 --port 8000 --reload >/tmp/uvicorn.log 2>&1 &",
+
+  // Auto-forward the web port and open a preview when it comes up.
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "TravelAdvisor Web",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  }
+}
