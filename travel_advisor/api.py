@@ -1,36 +1,36 @@
-"""FastAPI surface for the planning engine.
+"""FastAPI application for TravelAdvisor.
 
 Run locally with::
 
     uvicorn travel_advisor.api:app --reload
 
-* ``POST /plan``       — plan a trip from a :class:`TripRequest` using the live
-  open-data providers (needs outbound network).
-* ``POST /reschedule`` — re-plan an existing itinerary around a disruption.
-  Deterministic and offline (uses the haversine routing estimate), so it never
-  depends on an external service being reachable.
+Endpoints:
+
+* ``POST /auth/register``            — create an account
+* ``POST /auth/token``               — log in, returns a bearer token
+* ``GET  /auth/me``                  — the current user
+* ``POST /itineraries``              — plan a trip (live data) and save it
+* ``GET  /itineraries``              — list the user's trips
+* ``GET  /itineraries/{id}``         — one trip, with its full plan
+* ``POST /itineraries/{id}/reschedule`` — re-plan around a disruption, save a revision
+* ``DELETE /itineraries/{id}``       — delete a trip
+* ``POST /reschedule``               — stateless, offline re-plan utility
+* ``GET  /health``
+
+The app is built by :func:`create_app` so tests can inject an in-memory
+database and an offline planner.
 """
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from .db import Database
 from .engine import Rescheduler, TripPlanner
-from .models import (
-    Disruption,
-    Itinerary,
-    PointOfInterest,
-    RescheduleResult,
-    TripRequest,
-)
+from .models import Disruption, Itinerary, PointOfInterest, RescheduleResult
 from .providers import HaversineRoutingProvider
-
-app = FastAPI(
-    title="TravelAdvisor",
-    version="0.1.0",
-    description="Automated travel itinerary scheduling and re-scheduling.",
-)
+from .routers import auth, itineraries
 
 
 class RescheduleRequest(BaseModel):
@@ -39,28 +39,33 @@ class RescheduleRequest(BaseModel):
     spare_pois: list[PointOfInterest] = Field(default_factory=list)
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def create_app(*, db: Database | None = None, planner_factory=None) -> FastAPI:
+    database = db or Database.from_env()
+    database.init()
 
-
-@app.post("/plan", response_model=Itinerary)
-def plan(request: TripRequest) -> Itinerary:
-    planner = TripPlanner()
-    try:
-        planned = planner.plan(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:  # upstream provider/network failure
-        raise HTTPException(status_code=502, detail=f"Upstream data error: {exc}") from exc
-    return planned.itinerary
-
-
-@app.post("/reschedule", response_model=RescheduleResult)
-def reschedule(body: RescheduleRequest) -> RescheduleResult:
-    rescheduler = Rescheduler(HaversineRoutingProvider())
-    return rescheduler.reschedule(
-        body.itinerary,
-        body.disruption,
-        spare_pois=body.spare_pois,
+    app = FastAPI(
+        title="TravelAdvisor",
+        version="0.2.0",
+        description="Automated travel itinerary scheduling, re-scheduling, and storage.",
     )
+    app.state.db = database
+    app.state.planner_factory = planner_factory or (lambda: TripPlanner())
+
+    app.include_router(auth.router)
+    app.include_router(itineraries.router)
+
+    @app.get("/health", tags=["meta"])
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/reschedule", response_model=RescheduleResult, tags=["itineraries"])
+    def reschedule(body: RescheduleRequest) -> RescheduleResult:
+        """Stateless re-plan: pass an itinerary in, get the updated plan back.
+        Deterministic and offline — handy for previews and integrations."""
+        rescheduler = Rescheduler(HaversineRoutingProvider())
+        return rescheduler.reschedule(body.itinerary, body.disruption, spare_pois=body.spare_pois)
+
+    return app
+
+
+app = create_app()

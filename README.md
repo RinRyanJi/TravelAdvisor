@@ -43,7 +43,17 @@ travel_advisor/
 │   ├── scheduler.py   #   從請求 + 候選地點建立完整行程
 │   ├── rescheduler.py #   吸收突發狀況並重排，附上「變更說明」
 │   └── planner.py     #   端到端：把真實 providers 接上 scheduler
-├── api.py             # FastAPI 服務層（/plan, /reschedule, /health）
+├── db/                # 持久化層（SQLAlchemy）
+│   ├── models.py      #   ORM 資料表：UserRow / ItineraryRow
+│   ├── session.py     #   Database（引擎/連線管理，可注入測試用記憶體 DB）
+│   └── repository.py  #   UserRepository / ItineraryRepository（ORM ↔ 領域模型）
+├── routers/           # HTTP 路由（依資源分組）
+│   ├── auth.py        #   註冊 / 登入 / 目前使用者
+│   └── itineraries.py #   行程 CRUD + 重排並存檔
+├── security.py        # 密碼雜湊（PBKDF2）與 JWT 權杖
+├── deps.py            # FastAPI 相依：DB session、目前使用者、planner
+├── schemas.py         # API 請求/回應模型
+├── api.py             # FastAPI 應用工廠（組裝 DB + planner + routers）
 ├── cli.py             # 命令列介面（demo / plan）
 ├── render.py          # 行程的文字化輸出
 └── samples.py         # 離線示範/測試用的內建資料
@@ -83,14 +93,54 @@ travel-advisor plan \
 > 不是程式問題；請改用 `demo`，或在允許這些主機的環境執行。
 > 所有 provider 對真實 API 回應格式的解析都有單元測試覆蓋（`tests/test_providers.py`）。
 
-### 3. 以 API 服務執行
+### 3. 以 API 服務執行（含帳號與行程儲存）
 
 ```bash
 uvicorn travel_advisor.api:app --reload
-# POST /plan        —— 依 TripRequest 規劃（即時資料）
-# POST /reschedule  —— 對既有行程套用突發狀況重排（離線、可預測）
-# GET  /health
 ```
+
+| 方法 | 路徑 | 說明 | 需登入 |
+| --- | --- | --- | --- |
+| POST | `/auth/register` | 建立帳號 | |
+| POST | `/auth/token` | 登入，回傳 JWT bearer token | |
+| GET  | `/auth/me` | 目前使用者 | ✔ |
+| POST | `/itineraries` | 依 TripRequest 規劃（即時資料）並存檔 | ✔ |
+| GET  | `/itineraries` | 列出使用者的所有行程 | ✔ |
+| GET  | `/itineraries/{id}` | 取得單一行程（含完整每日計畫） | ✔ |
+| POST | `/itineraries/{id}/reschedule` | 套用突發狀況重排，存為新版本 | ✔ |
+| DELETE | `/itineraries/{id}` | 刪除行程 | ✔ |
+| POST | `/reschedule` | 無狀態、離線的重排工具 | |
+| GET  | `/health` | 健康檢查 | |
+
+典型流程：
+
+```bash
+# 註冊並登入取得 token
+curl -X POST localhost:8000/auth/register -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"password123"}'
+TOKEN=$(curl -s -X POST localhost:8000/auth/token -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"password123"}' | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+# 規劃並儲存一趟行程（即時資料）
+curl -X POST localhost:8000/itineraries -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"destination":"Kyoto, Japan","start_date":"2026-09-01","end_date":"2026-09-03","interests":["history","art"]}'
+
+# 之後遇到下雨，對已存行程重排（離線、存為新版本）
+curl -X POST localhost:8000/itineraries/<id>/reschedule -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"type":"weather_rain","date":"2026-09-02"}'
+```
+
+行程與候選地點一併存入資料庫，因此對已儲存行程的重排是**離線且可預測**的
+（不需再次連外）。互動式 API 文件在服務啟動後見 `http://localhost:8000/docs`。
+
+#### 環境變數
+
+| 變數 | 預設 | 說明 |
+| --- | --- | --- |
+| `TRAVELADVISOR_DATABASE_URL` | `sqlite:///./traveladvisor.db` | 資料庫連線；可換成 PostgreSQL |
+| `TRAVELADVISOR_SECRET` | （開發用預設值） | JWT 簽章密鑰，正式環境務必自行設定 |
 
 ### 4. 執行測試
 
@@ -132,16 +182,21 @@ pytest            # 23 個測試，涵蓋模型、引擎、重排、provider 解
 
 ## 里程碑與後續規劃
 
-**本次已完成（MVP：核心排程引擎 + 資料模型）**
+**里程碑一：核心排程引擎 + 資料模型**
 - ✅ 完整領域資料模型（行程請求、地點、開放時間、行程、突發狀況）
 - ✅ 排程引擎：興趣配對、地理鄰近路線、開放時間、交通時間、用餐、節奏、天氣感知
 - ✅ 動態重排：四類突發狀況 + 變更說明
 - ✅ 真實開放資料 providers（皆有解析測試）
 - ✅ CLI（離線 demo + 即時 plan）與 FastAPI 服務骨架
 
+**里程碑二：行程持久化 + 使用者帳號**
+- ✅ 資料庫層（SQLAlchemy，SQLite 預設，可換 PostgreSQL）
+- ✅ 使用者帳號：註冊、登入、密碼雜湊（PBKDF2）、JWT 認證
+- ✅ 行程 CRUD API，含所有權隔離（使用者只能看到自己的行程）
+- ✅ 對已儲存行程套用突發狀況並存為新版本（離線、可預測）
+
 **下一步（尚未實作）**
 - ⏳ 真正的訂位/訂票整合（航班、住宿、門票）與價格
-- ⏳ 行程持久化（資料庫）與使用者帳號
 - ⏳ 完整的 OSM `opening_hours` 解析（目前簡化處理，見 `providers/poi.py`）
 - ⏳ 前端網頁介面
 - ⏳ 天氣以外的即時事件來源（航班狀態、交通告警）自動觸發重排

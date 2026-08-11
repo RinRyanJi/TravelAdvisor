@@ -16,6 +16,11 @@ env/
 .coverage
 htmlcov/
 
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Env / secrets
 .env
 .env.*
