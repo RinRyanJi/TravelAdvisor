@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TravelAdvisor — 自動化旅遊行程</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --panel: #ffffff; --ink: #1c2430; --muted: #6b7684;
+      --line: #e3e8ee; --brand: #2563eb; --brand-ink: #ffffff;
+      --accent: #0ea5a4; --warn: #b45309; --danger: #dc2626;
+      --rain: #0369a1; --shadow: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.06);
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f141a; --panel: #171e26; --ink: #e6ebf1; --muted: #9aa7b4;
+        --line: #263039; --brand: #3b82f6; --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.5 -apple-system, "Segoe UI", "Noto Sans TC", Roboto, sans-serif;
+    }
+    a { color: var(--brand); }
+    button {
+      font: inherit; cursor: pointer; border: 1px solid var(--line);
+      background: var(--panel); color: var(--ink); border-radius: 8px;
+      padding: 8px 14px; transition: filter .15s, background .15s;
+    }
+    button:hover { filter: brightness(0.97); }
+    button.primary { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+    button.ghost { background: transparent; }
+    button.chip { padding: 4px 10px; font-size: 13px; border-radius: 999px; }
+    button:disabled { opacity: .5; cursor: default; }
+    input, select {
+      font: inherit; width: 100%; padding: 9px 11px; border: 1px solid var(--line);
+      border-radius: 8px; background: var(--panel); color: var(--ink);
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+    .field { margin-bottom: 12px; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    header.top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 5;
+    }
+    .brand { font-weight: 700; font-size: 18px; letter-spacing: .2px; }
+    .brand span { color: var(--brand); }
+    .muted { color: var(--muted); }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 22px; }
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 22px; align-items: start; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .panel .body { padding: 18px; }
+    .panel h2 { margin: 0; padding: 15px 18px; font-size: 15px; border-bottom: 1px solid var(--line); }
+    .stack > * + * { margin-top: 18px; }
+    /* auth */
+    .auth-shell { min-height: 70vh; display: grid; place-items: center; }
+    .auth-card { width: 100%; max-width: 380px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .tabs button { flex: 1; }
+    .tabs button.active { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+    /* trips list */
+    .trip { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+    .trip + .trip { margin-top: 8px; }
+    .trip:hover { border-color: var(--brand); }
+    .trip.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--panel)); }
+    .trip .t { font-weight: 600; }
+    .trip .s { font-size: 12px; color: var(--muted); }
+    .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--muted); }
+    /* itinerary */
+    .day { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .day + .day { margin-top: 14px; }
+    .day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 14px; background: color-mix(in srgb, var(--brand) 5%, var(--panel)); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .day-head .d { font-weight: 600; }
+    .day-head .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .wx { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--rain) 15%, transparent); color: var(--rain); }
+    .item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; }
+    .item + .item { border-top: 1px dashed var(--line); }
+    .item .time { width: 96px; flex: none; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+    .item .ic { flex: none; width: 20px; text-align: center; }
+    .item .main { flex: 1; }
+    .item .title { font-weight: 500; }
+    .item .meta { font-size: 12px; color: var(--muted); }
+    .item.meal .title { color: var(--accent); }
+    .item .x { flex: none; }
+    .item .x button { padding: 2px 8px; font-size: 12px; color: var(--danger); border-color: transparent; background: transparent; }
+    .item .x button:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+    .empty { padding: 26px; text-align: center; color: var(--muted); }
+    .log { padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); font-size: 14px; }
+    .log .h { font-weight: 600; margin-bottom: 6px; }
+    .log ul { margin: 0; padding-left: 20px; }
+    .log .u { color: var(--warn); }
+    .totals { display: flex; justify-content: space-between; padding: 12px 14px; font-weight: 600; }
+    /* interests */
+    .interests { display: flex; flex-wrap: wrap; gap: 8px; }
+    .interests label { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; color: var(--ink); font-size: 13px; }
+    .interests input { width: auto; }
+    .interests label.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--panel)); }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: 10px 16px; border-radius: 8px; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+    .check input { width: auto; }
+    .hide { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Travel<span>Advisor</span></div>
+    <div id="userbar" class="hide">
+      <span id="who" class="muted"></span>
+      <button id="logout" class="ghost">登出</button>
+    </div>
+  </header>
+
+  <!-- AUTH -->
+  <div id="authView" class="wrap auth-shell">
+    <div class="panel auth-card">
+      <div class="body">
+        <div class="tabs">
+          <button id="tabLogin" class="active">登入</button>
+          <button id="tabRegister">註冊</button>
+        </div>
+        <form id="authForm" class="stack">
+          <div class="field">
+            <label>電子郵件</label>
+            <input id="email" type="email" required placeholder="you@example.com" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label>密碼<span class="muted"> （至少 8 碼）</span></label>
+            <input id="password" type="password" required minlength="8" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <button id="authSubmit" class="primary" type="submit" style="width:100%">登入</button>
+          <div class="hint" id="authHint">還沒有帳號？點上方「註冊」。</div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="wrap grid hide">
+    <div class="stack">
+      <!-- Plan form -->
+      <section class="panel">
+        <h2>規劃新行程</h2>
+        <div class="body">
+          <form id="planForm" class="stack">
+            <div class="field">
+              <label>目的地</label>
+              <input id="destination" required value="Kyoto, Japan" />
+            </div>
+            <div class="row">
+              <div class="field"><label>出發日</label><input id="start" type="date" required /></div>
+              <div class="field"><label>結束日</label><input id="end" type="date" required /></div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label>人數</label>
+                <input id="party" type="number" min="1" value="2" />
+              </div>
+              <div class="field">
+                <label>節奏</label>
+                <select id="pace">
+                  <option value="relaxed">悠閒</option>
+                  <option value="balanced" selected>均衡</option>
+                  <option value="packed">緊湊</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label>興趣</label>
+              <div class="interests" id="interests"></div>
+            </div>
+            <label class="check">
+              <input id="sample" type="checkbox" checked />
+              離線示範模式（用內建京都資料，不需連外）
+            </label>
+            <div class="hint">取消勾選則串接即時開放資料（需對外網路）。</div>
+            <button id="planSubmit" class="primary" type="submit" style="width:100%">規劃並儲存行程</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Saved trips -->
+      <section class="panel">
+        <h2>我的行程</h2>
+        <div class="body" id="tripList"><div class="muted">尚無已儲存的行程。</div></div>
+      </section>
+    </div>
+
+    <!-- Itinerary detail -->
+    <section class="panel">
+      <h2 id="detailTitle">行程細節</h2>
+      <div class="body" id="detail">
+        <div class="empty">從左側規劃一趟新行程，或點選已儲存的行程來檢視。</div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+  (() => {
+    const TOKEN_KEY = "ta_token";
+    const INTERESTS = [
+      ["history","歷史"],["art","藝術"],["nature","自然"],["food","美食"],
+      ["shopping","購物"],["nightlife","夜生活"],["family","親子"],["relaxation","放鬆"],
+    ];
+    const ICON = { activity: "◉", meal: "🍴", transfer: "✈", free: "•" };
+    const DISRUPTION_LABEL = {
+      poi_closed: "景點臨時關閉", weather_rain: "當天下雨",
+      delay: "行程延誤", transport_cancelled: "交通取消",
+    };
+
+    const state = { token: localStorage.getItem(TOKEN_KEY), user: null, current: null, mode: "login" };
+
+    // ---- tiny DOM + fetch helpers ----
+    const $ = (id) => document.getElementById(id);
+    const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    const time = (iso) => iso.slice(11, 16);
+
+    let toastTimer;
+    function toast(msg) {
+      const t = $("toast"); t.textContent = msg; t.classList.add("show");
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+    }
+
+    async function api(path, { method = "GET", body, auth = true } = {}) {
+      const headers = { "content-type": "application/json" };
+      if (auth && state.token) headers.authorization = `Bearer ${state.token}`;
+      const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      if (res.status === 204) return null;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : (data.detail?.[0]?.msg || `錯誤 ${res.status}`);
+        throw new Error(detail);
+      }
+      return data;
+    }
+
+    // ---- auth ----
+    function showAuth() { $("authView").classList.remove("hide"); $("appView").classList.add("hide"); $("userbar").classList.add("hide"); }
+    function showApp() {
+      $("authView").classList.add("hide"); $("appView").classList.remove("hide"); $("userbar").classList.remove("hide");
+      $("who").textContent = state.user?.email || "";
+    }
+    function setMode(mode) {
+      state.mode = mode;
+      const login = mode === "login";
+      $("tabLogin").classList.toggle("active", login);
+      $("tabRegister").classList.toggle("active", !login);
+      $("authSubmit").textContent = login ? "登入" : "建立帳號";
+      $("password").setAttribute("autocomplete", login ? "current-password" : "new-password");
+      $("authHint").textContent = login ? "還沒有帳號？點上方「註冊」。" : "已有帳號？點上方「登入」。";
+    }
+
+    $("tabLogin").onclick = () => setMode("login");
+    $("tabRegister").onclick = () => setMode("register");
+
+    $("authForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const email = $("email").value.trim(), password = $("password").value;
+      try {
+        if (state.mode === "register") {
+          await api("/auth/register", { method: "POST", body: { email, password }, auth: false });
+        }
+        const tok = await api("/auth/token", { method: "POST", body: { email, password }, auth: false });
+        state.token = tok.access_token; localStorage.setItem(TOKEN_KEY, state.token);
+        await boot();
+      } catch (err) { toast(err.message); }
+    };
+
+    $("logout").onclick = () => {
+      state.token = null; state.user = null; state.current = null;
+      localStorage.removeItem(TOKEN_KEY); showAuth();
+    };
+
+    // ---- planning ----
+    function renderInterests() {
+      const box = $("interests"); box.innerHTML = "";
+      for (const [val, label] of INTERESTS) {
+        const wrap = el(`<label><input type="checkbox" value="${val}"/>${label}</label>`);
+        const cb = wrap.querySelector("input");
+        cb.onchange = () => wrap.classList.toggle("on", cb.checked);
+        box.appendChild(wrap);
+      }
+    }
+
+    $("planForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const interests = [...document.querySelectorAll("#interests input:checked")].map((c) => c.value);
+      const body = {
+        destination: $("destination").value.trim(),
+        start_date: $("start").value,
+        end_date: $("end").value,
+        party_size: Number($("party").value) || 1,
+        pace: $("pace").value,
+        interests,
+      };
+      const sample = $("sample").checked;
+      const btn = $("planSubmit"); btn.disabled = true; btn.textContent = "規劃中…";
+      try {
+        const out = await api(`/itineraries?sample=${sample}`, { method: "POST", body });
+        state.current = out;
+        await refreshTrips();
+        renderDetail();
+        if (!out.itinerary.days.some((d) => d.items.length)) toast("沒有排入任何景點，試試放寬興趣或日期。");
+      } catch (err) {
+        toast(err.message + (sample ? "" : "（即時模式需要對外網路，可改用離線示範）"));
+      } finally { btn.disabled = false; btn.textContent = "規劃並儲存行程"; }
+    };
+
+    // ---- trips list ----
+    async function refreshTrips() {
+      const trips = await api("/itineraries");
+      const box = $("tripList");
+      if (!trips.length) { box.innerHTML = `<div class="muted">尚無已儲存的行程。</div>`; return; }
+      box.innerHTML = "";
+      for (const t of trips) {
+        const active = state.current?.id === t.id ? " active" : "";
+        const node = el(`<div class="trip${active}" data-id="${t.id}">
+          <div class="t">${esc(t.title)}</div>
+          <div class="s">${t.start_date} → ${t.end_date} · <span class="badge">修訂 v${t.revision}</span></div>
+        </div>`);
+        node.onclick = () => openTrip(t.id);
+        box.appendChild(node);
+      }
+    }
+
+    async function openTrip(id) {
+      try { state.current = await api(`/itineraries/${id}`); await refreshTrips(); renderDetail(); }
+      catch (err) { toast(err.message); }
+    }
+
+    // ---- itinerary rendering ----
+    function renderDetail(changeResult) {
+      const out = state.current;
+      const detail = $("detail");
+      if (!out) { detail.innerHTML = `<div class="empty">從左側規劃一趟新行程來檢視。</div>`; return; }
+      $("detailTitle").textContent = out.title;
+      const itin = out.itinerary;
+      detail.innerHTML = "";
+
+      if (changeResult) detail.appendChild(renderLog(changeResult));
+
+      for (const day of itin.days) {
+        const wx = day.weather && day.weather.condition && day.weather.condition !== "unknown"
+          ? `<span class="wx">${esc(day.weather.condition)}${day.weather.temp_max_c != null ? ` · ${Math.round(day.weather.temp_min_c)}–${Math.round(day.weather.temp_max_c)}°C` : ""}</span>` : "";
+        const dayNode = el(`<div class="day">
+          <div class="day-head">
+            <div class="d">${day.date} ${wx}</div>
+            <div class="acts">
+              <button class="chip" data-action="weather_rain" data-date="${day.date}">🌧 下雨</button>
+              <button class="chip" data-action="delay" data-date="${day.date}">⏰ 延誤</button>
+              <button class="chip" data-action="transport_cancelled" data-date="${day.date}">✈ 交通取消</button>
+            </div>
+          </div>
+        </div>`);
+
+        if (!day.items.length) {
+          dayNode.appendChild(el(`<div class="empty">${esc(day.notes || "（本日尚無安排）")}</div>`));
+        } else {
+          for (const it of day.items) {
+            const travel = it.travel_from_prev_minutes ? `　→ 交通 ${it.travel_from_prev_minutes} 分` : "";
+            const cost = it.cost ? `　$${Math.round(it.cost)}` : "";
+            const close = it.type === "activity"
+              ? `<div class="x"><button data-action="poi_closed" data-item-id="${it.id}" data-date="${day.date}" title="標記為臨時關閉">✕ 關閉</button></div>` : "";
+            dayNode.appendChild(el(`<div class="item ${it.type}">
+              <div class="time">${time(it.start)}–${time(it.end)}</div>
+              <div class="ic">${ICON[it.type] || "•"}</div>
+              <div class="main"><div class="title">${esc(it.title)}</div><div class="meta">${esc(travel)}${esc(cost)}</div></div>
+              ${close}
+            </div>`));
+          }
+        }
+        detail.appendChild(dayNode);
+      }
+
+      detail.appendChild(el(`<div class="totals"><span>預估總花費</span><span>$${Math.round(itin.total_cost)} · ${itin.request.party_size} 人</span></div>`));
+      detail.appendChild(el(`<div class="hint">提示：點日期旁的按鈕或景點的「✕ 關閉」來模擬突發狀況，系統會即時重排並存為新版本。</div>`));
+
+      detail.querySelectorAll("[data-action]").forEach((b) => (b.onclick = () => onDisrupt(b.dataset)));
+    }
+
+    function renderLog(result) {
+      const changes = (result.changes || []).map((c) => `<li>${esc(c)}</li>`).join("");
+      const unresolved = (result.unresolved || []).map((u) => `<li class="u">⚠ ${esc(u)}</li>`).join("");
+      return el(`<div class="log" style="margin-bottom:14px">
+        <div class="h">✓ 已重排（修訂 v${result.itinerary.revision}）</div>
+        <ul>${changes || "<li>無變更。</li>"}${unresolved}</ul>
+      </div>`);
+    }
+
+    // ---- disruptions ----
+    async function onDisrupt({ action, date, itemId }) {
+      const body = { type: action, date };
+      if (action === "poi_closed") body.target_item_id = itemId;
+      if (action === "delay") {
+        const mins = prompt("延誤幾分鐘？", "90");
+        if (mins === null) return;
+        body.delay_minutes = Number(mins) || 0;
+      }
+      body.description = DISRUPTION_LABEL[action] || action;
+      try {
+        const result = await api(`/itineraries/${state.current.id}/reschedule`, { method: "POST", body });
+        state.current = { ...state.current, itinerary: result.itinerary, revision: result.itinerary.revision };
+        await refreshTrips();
+        renderDetail(result);
+      } catch (err) { toast(err.message); }
+    }
+
+    // ---- boot ----
+    async function boot() {
+      try {
+        state.user = await api("/auth/me");
+        showApp();
+        await refreshTrips();
+        renderDetail();
+      } catch { state.token = null; localStorage.removeItem(TOKEN_KEY); showAuth(); }
+    }
+
+    function initDates() {
+      $("start").value = "2026-09-01";
+      $("end").value = "2026-09-03";
+    }
+
+    renderInterests();
+    initDates();
+    setMode("login");
+    if (state.token) boot(); else showAuth();
+  })();
+  </script>
+</body>
+</html>

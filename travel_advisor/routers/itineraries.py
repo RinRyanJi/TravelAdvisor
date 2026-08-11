@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..db import ItineraryRepository
 from ..db.models import UserRow
-from ..deps import get_current_user, get_db, get_planner
+from ..deps import get_current_user, get_db, get_planner, get_sample_planner
 from ..engine import Rescheduler, TripPlanner
 from ..models import Disruption, RescheduleResult, TripRequest
 from ..providers import HaversineRoutingProvider
@@ -23,13 +23,21 @@ def _title_for(request: TripRequest) -> str:
 @router.post("", response_model=ItineraryOut, status_code=status.HTTP_201_CREATED)
 def create_itinerary(
     request: TripRequest,
+    sample: bool = False,
     current: UserRow = Depends(get_current_user),
     db: Session = Depends(get_db),
     planner: TripPlanner = Depends(get_planner),
+    sample_planner: TripPlanner = Depends(get_sample_planner),
 ) -> ItineraryOut:
-    """Plan a trip from live open data and store it against the current user."""
+    """Plan a trip and store it against the current user.
+
+    By default the plan is built from live open data. Pass ``?sample=true`` to
+    plan from the built-in offline dataset — useful for demos and for
+    environments without outbound access to the open-data services.
+    """
+    active_planner = sample_planner if sample else planner
     try:
-        planned = planner.plan(request)
+        planned = active_planner.plan(request)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except Exception as exc:  # upstream provider/network failure

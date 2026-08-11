@@ -23,14 +23,21 @@ database and an offline planner.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .db import Database
+from .demo import build_sample_planner
 from .engine import Rescheduler, TripPlanner
 from .models import Disruption, Itinerary, PointOfInterest, RescheduleResult
 from .providers import HaversineRoutingProvider
 from .routers import auth, itineraries
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 class RescheduleRequest(BaseModel):
@@ -39,20 +46,33 @@ class RescheduleRequest(BaseModel):
     spare_pois: list[PointOfInterest] = Field(default_factory=list)
 
 
-def create_app(*, db: Database | None = None, planner_factory=None) -> FastAPI:
+def create_app(
+    *,
+    db: Database | None = None,
+    planner_factory=None,
+    sample_planner_factory=None,
+) -> FastAPI:
     database = db or Database.from_env()
     database.init()
 
     app = FastAPI(
         title="TravelAdvisor",
-        version="0.2.0",
+        version="0.3.0",
         description="Automated travel itinerary scheduling, re-scheduling, and storage.",
     )
     app.state.db = database
     app.state.planner_factory = planner_factory or (lambda: TripPlanner())
+    app.state.sample_planner_factory = sample_planner_factory or build_sample_planner
 
     app.include_router(auth.router)
     app.include_router(itineraries.router)
+
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+        @app.get("/", include_in_schema=False)
+        def index() -> FileResponse:
+            return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

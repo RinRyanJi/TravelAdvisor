@@ -53,7 +53,10 @@ travel_advisor/
 ├── security.py        # 密碼雜湊（PBKDF2）與 JWT 權杖
 ├── deps.py            # FastAPI 相依：DB session、目前使用者、planner
 ├── schemas.py         # API 請求/回應模型
-├── api.py             # FastAPI 應用工廠（組裝 DB + planner + routers）
+├── demo.py            # 離線示範用 planner（用內建資料規劃，不需連外）
+├── api.py             # FastAPI 應用工廠（組裝 DB + planner + routers + 前端）
+├── static/
+│   └── index.html     # 單頁前端（原生 HTML/CSS/JS，無需建置工具）
 ├── cli.py             # 命令列介面（demo / plan）
 ├── render.py          # 行程的文字化輸出
 └── samples.py         # 離線示範/測試用的內建資料
@@ -93,7 +96,19 @@ travel-advisor plan \
 > 不是程式問題；請改用 `demo`，或在允許這些主機的環境執行。
 > 所有 provider 對真實 API 回應格式的解析都有單元測試覆蓋（`tests/test_providers.py`）。
 
-### 3. 以 API 服務執行（含帳號與行程儲存）
+### 3. 網頁介面（最直觀）
+
+```bash
+uvicorn travel_advisor.api:app --reload
+# 用瀏覽器開啟 http://localhost:8000
+```
+
+在網頁上即可：註冊/登入 → 填表規劃行程 → 檢視每日行程 →
+點按鈕模擬突發狀況（下雨、景點關閉、延誤、交通取消）並**即時看到重排結果與變更說明**。
+預設勾選「離線示範模式」用內建京都資料，不需連外即可完整體驗；
+取消勾選則走即時開放資料（需對外網路）。
+
+### 4. 以 API 服務執行（含帳號與行程儲存）
 
 ```bash
 uvicorn travel_advisor.api:app --reload
@@ -104,7 +119,7 @@ uvicorn travel_advisor.api:app --reload
 | POST | `/auth/register` | 建立帳號 | |
 | POST | `/auth/token` | 登入，回傳 JWT bearer token | |
 | GET  | `/auth/me` | 目前使用者 | ✔ |
-| POST | `/itineraries` | 依 TripRequest 規劃（即時資料）並存檔 | ✔ |
+| POST | `/itineraries` | 依 TripRequest 規劃並存檔（加 `?sample=true` 用離線資料） | ✔ |
 | GET  | `/itineraries` | 列出使用者的所有行程 | ✔ |
 | GET  | `/itineraries/{id}` | 取得單一行程（含完整每日計畫） | ✔ |
 | POST | `/itineraries/{id}/reschedule` | 套用突發狀況重排，存為新版本 | ✔ |
@@ -142,10 +157,10 @@ curl -X POST localhost:8000/itineraries/<id>/reschedule -H "authorization: Beare
 | `TRAVELADVISOR_DATABASE_URL` | `sqlite:///./traveladvisor.db` | 資料庫連線；可換成 PostgreSQL |
 | `TRAVELADVISOR_SECRET` | （開發用預設值） | JWT 簽章密鑰，正式環境務必自行設定 |
 
-### 4. 執行測試
+### 5. 執行測試
 
 ```bash
-pytest            # 23 個測試，涵蓋模型、引擎、重排、provider 解析
+pytest            # 37 個測試：模型、引擎、重排、provider 解析、持久化、認證 API、前端
 ```
 
 ---
@@ -195,8 +210,13 @@ pytest            # 23 個測試，涵蓋模型、引擎、重排、provider 解
 - ✅ 行程 CRUD API，含所有權隔離（使用者只能看到自己的行程）
 - ✅ 對已儲存行程套用突發狀況並存為新版本（離線、可預測）
 
+**里程碑三：前端網頁介面**
+- ✅ 單頁前端（原生 HTML/CSS/JS，由 FastAPI 直接服務，無需建置工具）
+- ✅ 註冊/登入、填表規劃、每日行程檢視
+- ✅ 一鍵模擬四類突發狀況並即時看到重排結果與變更說明
+- ✅ 離線示範模式（`?sample=true`），沙箱環境也能完整體驗
+
 **下一步（尚未實作）**
 - ⏳ 真正的訂位/訂票整合（航班、住宿、門票）與價格
 - ⏳ 完整的 OSM `opening_hours` 解析（目前簡化處理，見 `providers/poi.py`）
-- ⏳ 前端網頁介面
 - ⏳ 天氣以外的即時事件來源（航班狀態、交通告警）自動觸發重排

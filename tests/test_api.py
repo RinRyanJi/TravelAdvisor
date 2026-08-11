@@ -111,6 +111,30 @@ def test_full_itinerary_lifecycle(client):
     assert client.get(f"/itineraries/{itinerary_id}", headers=_auth(token)).status_code == 404
 
 
+def test_frontend_is_served(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "TravelAdvisor" in resp.text
+
+
+def test_sample_planning_works_offline_via_query_flag(client):
+    # Uses the built-in sample planner (no fake, no network) via ?sample=true.
+    token = _register_and_login(client, email="demo@example.com")
+    body = {
+        "destination": "Anywhere",
+        "start_date": "2026-09-01",
+        "end_date": "2026-09-02",
+        "interests": ["history"],
+        "pace": "balanced",
+    }
+    resp = client.post("/itineraries?sample=true", json=body, headers=_auth(token))
+    assert resp.status_code == 201
+    data = resp.json()
+    assert len(data["itinerary"]["days"]) == 2
+    assert any(d["items"] for d in data["itinerary"]["days"])
+
+
 def test_users_cannot_see_each_others_itineraries(client):
     owner_token = _register_and_login(client, email="owner@example.com")
     body = sample_kyoto_request().model_dump(mode="json")

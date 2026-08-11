@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from .place import PointOfInterest
 from .trip import TripRequest
@@ -46,6 +46,7 @@ class DayPlan(BaseModel):
     weather: DayWeather | None = None
     notes: str = ""
 
+    @computed_field  # serialised into API responses
     @property
     def total_cost(self) -> float:
         return sum(item.cost for item in self.items)
@@ -66,6 +67,7 @@ class Itinerary(BaseModel):
     # Bumped every time the rescheduler produces a new version.
     revision: int = 0
 
+    @computed_field  # serialised into API responses
     @property
     def total_cost(self) -> float:
         return sum(day.total_cost for day in self.days)

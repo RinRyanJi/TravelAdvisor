@@ -33,6 +33,11 @@ def get_planner(request: Request) -> TripPlanner:
     return request.app.state.planner_factory()
 
 
+def get_sample_planner(request: Request) -> TripPlanner:
+    """The offline, sample-data planner used when a request opts into demo mode."""
+    return request.app.state.sample_planner_factory()
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),
